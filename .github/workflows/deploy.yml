@@ -1,0 +1,46 @@
+name: CI/CD Docker to EC2
+
+on:
+  push:
+    branches:
+      - main   # main 브랜치에 push될 때마다 배포
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/eunwoo_umc_cicd:latest
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_PRIVATE_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/eunwoo_umc_cicd:latest
+
+            docker stop umc-app || true
+            docker rm umc-app || true
+
+            docker run -d --name umc-app \
+              -p 8080:8080 \
+              ${{ secrets.DOCKERHUB_USERNAME }}/eunwoo_umc_cicd:latest
